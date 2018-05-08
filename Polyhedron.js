@@ -1,6 +1,9 @@
+const NON_COLLIDE_COLOR = 0x00ff00;
+const COLLIDE_COLOR = 0xff0000;
+
 class Polyhedron {
   constructor(polyhedron, position) {
-    this._mesh = new THREE.Mesh(polyhedron.geometry, new THREE.MeshLambertMaterial({ color: 0x00ff00 }));
+    this._mesh = new THREE.Mesh(polyhedron.geometry, new THREE.MeshLambertMaterial({ color: NON_COLLIDE_COLOR }));
     this._mesh.position.copy(position);
     this._v = new THREE.Vector3(0, 0, 0);
     this._w = new THREE.Quaternion();
@@ -22,6 +25,7 @@ class Polyhedron {
     this._shouldCalculateAABB = true;
     this._mesh.updateMatrix();
     this._mesh.updateMatrixWorld();
+    this._mesh.material.color = new THREE.Color(NON_COLLIDE_COLOR);
   }
 
   // Returns a clone because the object's matrix needs to be updated with position changes
@@ -38,7 +42,7 @@ class Polyhedron {
   // The object should only be rotated via its angular velocity
   get orientation() {
     const quat = new THREE.Quaternion();
-    return this._mesh.rotation.clone();
+    return this._mesh.getWorldQuaternion(quat);
   }
 
   get force() {
@@ -54,8 +58,12 @@ class Polyhedron {
     return this._aabb.clone();
   }
 
+  collide() {
+    this._mesh.material.color = new THREE.Color(COLLIDE_COLOR);
+  }
+
   worldToModelDir(d) {
-    return d.clone().applyQuaterion(this.orientation);
+    return d.clone().applyQuaternion(this.orientation.conjugate());
   }
 
   worldToModel(v) {
@@ -70,9 +78,9 @@ class Polyhedron {
     let max = -Number.MAX_VALUE;
     let selectedVert;
 
-    const buffer = this._mesh.geometry.position;
+    const buffer = this._mesh.geometry.attributes.position;
 
-    for(let c = 0; c < this.vertices.length; ++c) {
+    for(let c = 0; c * 3 < buffer.array.length; ++c) {
       const vert = new THREE.Vector3(buffer.getX(c), buffer.getY(c), buffer.getZ(c));
       const projVert = direction.dot(vert);
       if(projVert > max) {
