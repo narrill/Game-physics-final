@@ -8,11 +8,10 @@ class Polyhedron {
     this._v = new THREE.Vector3(0, 0, 0);
     this._w = new THREE.Quaternion();
     this._m = polyhedron.mass;
+    this._i = polyhedron.momentOfInertia;
     this._f = new THREE.Vector3(0, 0, 0);
 
     this._shouldCalculateAABB = true;
-
-    // to-do, set inertia tensor
 
     scene.add(this._mesh);
   }
@@ -21,6 +20,7 @@ class Polyhedron {
     const adt = this._f.multiplyScalar(dt / this._m);
     this._v.add(adt);
     this._mesh.position.add(this._v.clone().multiplyScalar(dt));
+    //this._v.set(0, 0, 0);
     this._f.set(0, 0, 0);
     this._shouldCalculateAABB = true;
     this._mesh.updateMatrix();
@@ -135,7 +135,8 @@ Object.keys(POLYHEDRONS).forEach((SHAPE) => {
   const DENSITY = 1;
   polyhedron.mass = volume * DENSITY;
 
-  // to-do, calculate inertia tensor
+  const r = Math.cbrt(.75 * volume / Math.PI);
+  polyhedron.momentOfInertia = .4 * polyhedron.mass * r * r;
 
   // Convert to buffer geometry for rendering performance
   POLYHEDRONS[SHAPE].geometry = new THREE.BufferGeometry().fromGeometry(geometry);
