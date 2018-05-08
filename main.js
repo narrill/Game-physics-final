@@ -108,6 +108,11 @@ const isZero = (v) => {
   return v.x === 0 && v.y === 0 && v.z === 0;
 };
 
+const isNearlyEqual = (v1, v2, epsilon = .0001) => {
+  const diff = v1.clone().sub(v2);
+  return Math.abs(diff.x) <= epsilon && Math.abs(diff.y) <= epsilon && Math.abs(diff.z) <= epsilon;
+};
+
 const mprCollision = (poly1, poly2) => {
   const cso = new ConfigurationSpaceObject(poly2, poly1);
 
@@ -166,16 +171,21 @@ const mprCollision = (poly1, poly2) => {
   }
 
   // Phase three - portal refinement
+  let hit = false;
+  const EPSILON = .0001;
   while(true) {
     const n = c.clone().sub(a).cross(b.clone().sub(a));
-    if(a.dot(n) > 0)
-      return true;
-    else if(a.dot(n) === 0)
-      return false;
+
+    // Origin inside tetrahedron - hit
+    if(a.dot(n) >= 0) {
+      hit = true;
+      // to-do, calculate barycentric coords
+    }
 
     const p = cso.supportFunction(n);
-    if(p.dot(n) < 0)
-      return false;
+    if(p.clone().sub(c).dot(n) <= EPSILON || p.dot(n) < 0) {
+      return hit;
+    }
 
     if(v.dot(p.clone().cross(a)) > 0)
       if(v.dot(p.clone().cross(b)) < 0)
