@@ -7,6 +7,7 @@ let selectedNode;
 
 const groundLevel = 100;
 const GRAVITY_FORCE = 10000;
+const FRICTION = 60;
 
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
@@ -64,15 +65,15 @@ class SoftBodyNode {
     for(let c = 0; c < this.linked.length; ++c) {
       const spring = this.linked[c];
       const other = this.linked[c].other;
-      let diff = subVector(other.position, this.position);
+      const diff = subVector(other.position, this.position);
       const distance = magVector(diff);
-      diff = normalizeVector(diff);
+      const direction = normalizeVector(diff);
 
       const compression = distance - spring.restLength;
       const velocity = subVector(other.velocity, this.velocity);
 
-      const force = (compression * spring.k) + dotVector(velocity, diff) * spring.damping;
-      this.force = addVector(this.force, scaleVector(force, diff));
+      const force = (compression * spring.k) + dotVector(velocity, direction) * spring.damping;
+      this.force = addVector(this.force, scaleVector(force, direction));
     }
   }
 
@@ -82,11 +83,12 @@ class SoftBodyNode {
     this.force = addVector(this.force, [0, GRAVITY_FORCE]);
     this.velocity = addVector(this.velocity, scaleVector(dt / this.mass, this.force));
     this.position = addVector(this.position, scaleVector(dt, this.velocity));
+    this.force = [0, 0];
     if(this.position[1] + this.radius > canvas.height - groundLevel) {
       this.position[1] = canvas.height - groundLevel - this.radius;
-      this.velocity[1] = 0;
+      this.velocity[0] -= this.velocity[0] * (FRICTION * dt);
+      this.velocity[1] = -this.velocity[1];
     }
-    this.force = [0, 0];
   }
 
   raycast(x, y) {
@@ -166,11 +168,6 @@ class SoftBody {
 class BlobBody extends SoftBody{
   constructor(x, y, count = 16, radius = 100, {restLength = radius, k = 50000, damping = 100} = {}) {
     super();
-    // for(let c = 0; c < width; ++c) {
-    //   for(let i = 0; i < height; ++i) {
-    //     this.nodes.push(new SoftBodyNode(x + c * spacing, y + i * spacing, 100));
-    //   }
-    // }
 
     const initialOffset = [0, radius];
     const wedgeAngle = Math.PI / count;
@@ -193,6 +190,7 @@ class BlobBody extends SoftBody{
 class GridBody extends SoftBody {
   constructor(x, y, width, height, spacing = 50, {restLength = spacing, k = 20000, damping = 1000} = {}) {
     super();
+
     for(let c = 0; c < width; ++c) {
       for(let i = 0; i < height; ++i) {
         this.nodes.push(new SoftBodyNode(x + c * spacing, y + i * spacing, 100));
@@ -320,8 +318,7 @@ window.onload = () => {
       debug = !debug;
   });
 
-  softBodies.push(new GridBody(300, 200, 5, 5, 20, {
-    restLength: 25, 
+  softBodies.push(new GridBody(300, 200, 5, 5, 20, { 
     k: 400000
   }));
 
