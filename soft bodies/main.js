@@ -3,6 +3,8 @@ let context;
 let origin;
 let debug = false;
 
+let selectedNode;
+
 const groundLevel = 100;
 const GRAVITY_FORCE = 100000;
 
@@ -36,6 +38,8 @@ const vectorMagSqr = (v) => v[0] * v[0] + v[1] * v[1];
 const magVector = (v) => Math.sqrt(v[0] * v[0] + v[1] * v[1]);
 const normalizeVector = (v) => {
   const mag = magVector(v);
+  if(mag === 0)
+    retirn [0, 0];
   return [v[0] / mag, v[1] / mag];
 };
 const distance = (p1, p2) => magVector(subVector(p1, p2));
@@ -50,9 +54,12 @@ class SoftBodyNode {
     this.mass = m;
     this.radius = Math.sqrt(m / Math.PI);
     this.linked = [];
+    this.selected = false;
   }
 
   updateSpringForce(dt) {
+    if(this.selected)
+      return;
     for(let c = 0; c < this.linked.length; ++c) {
       const spring = this.linked[c];
       const other = this.linked[c].other;
@@ -69,14 +76,20 @@ class SoftBodyNode {
   }
 
   update(dt) {    
+    if(this.selected)
+      return;
     this.force = addVector(this.force, [0, GRAVITY_FORCE]);
-    this.velocity = addVector(this.velocity, scaleVector(dt/this.mass, this.force));
+    this.velocity = addVector(this.velocity, scaleVector(dt / this.mass, this.force));
     this.position = addVector(this.position, scaleVector(dt, this.velocity));
     if(this.position[1] + this.radius > canvas.height - groundLevel) {
       this.position[1] = canvas.height - groundLevel - this.radius;
       this.velocity[1] = 0;
     }
     this.force = [0, 0];
+  }
+
+  raycast(x, y) {
+    return vectorMagSqr(subVector([x, y], this.position)) <= this.radius * this.radius;
   }
 
   drawLinks(ctx) {
@@ -89,7 +102,7 @@ class SoftBodyNode {
 
   draw(ctx) {
     ctx.save();
-    ctx.fillStyle = 'green';
+    ctx.fillStyle = (this.selected) ? 'blue' : 'green';
     ctx.beginPath();
     ctx.arc(this.position[0], this.position[1], this.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -97,6 +110,8 @@ class SoftBodyNode {
   }
 
   link(node, restLength, k, damping) {
+    if(!node)
+      return;
     this.linked.push({
       other: node,
       restLength,
@@ -107,20 +122,16 @@ class SoftBodyNode {
 }
 
 class SoftBody {
-  constructor(x, y, width, height, spacing = 50, restLength = spacing, k = 50000, damping = 100) {
-    this.nodes = [];
-    for(let c = 0; c < width; ++c) {
-      for(let i = 0; i < height; ++i) {
-        this.nodes.push(new SoftBodyNode(x + c * spacing, y + i * spacing, 100));
-      }
-    }
+  constructor() {
+    this.nodes = [];    
+  }
 
-    for(let c = 0; c < this.nodes.length - 1; ++c) {
-      for(let i = c + 1; i < this.nodes.length; ++i) {
-        this.nodes[c].link(this.nodes[i], restLength, k, damping);
-        this.nodes[i].link(this.nodes[c], restLength, k, damping);
-      }
+  raycast(x, y) {
+    for(let c = 0; c < this.nodes.length; ++c) {
+      if(this.nodes[c].raycast(x, y))
+        return this.nodes[c];
     }
+    return undefined;
   }
 
   draw(ctx) {
@@ -141,6 +152,57 @@ class SoftBody {
       this.nodes[c].updateSpringForce();
     for(let c = 0; c < this.nodes.length; ++c)
       this.nodes[c].update(dt);
+  }
+}
+
+// All nodes link to all other nodes
+class BlobBody extends SoftBody{
+  constructor(x, y, width, height, spacing = 50, restLength = spacing, k = 50000, damping = 100) {
+    super();
+    for(let c = 0; c < width; ++c) {
+      for(let i = 0; i < height; ++i) {
+        this.nodes.push(new SoftBodyNode(x + c * spacing, y + i * spacing, 100));
+      }
+    }
+
+    for(let c = 0; c < this.nodes.length - 1; ++c) {
+      for(let i = c + 1; i < this.nodes.length; ++i) {
+        this.nodes[c].link(this.nodes[i], restLength, k, damping);
+        this.nodes[i].link(this.nodes[c], restLength, k, damping);
+      }
+    }
+  }
+}
+
+// Nodes link only to their neighbors
+class GridBody extends SoftBody {
+  constructor(x, y, width, height, spacing = 50, restLength = spacing, k = 20000, damping = 1000) {
+    super();
+    for(let c = 0; c < width; ++c) {
+      for(let i = 0; i < height; ++i) {
+        this.nodes.push(new SoftBodyNode(x + c * spacing, y + i * spacing, 100));
+      }
+    }
+
+    for(let c = 0; c < this.nodes.length; ++c) {
+      const current = this.nodes[c];
+      const rowPosition = c % width;
+
+      current.link(this.nodes[c + width], restLength, k, damping);
+      current.link(this.nodes[c - width], restLength, k, damping);
+
+      if(rowPosition !== width - 1) {
+        current.link(this.nodes[c + 1], restLength, k, damping);
+        current.link(this.nodes[c + width + 1], restLength, k, damping);
+        current.link(this.nodes[c - width + 1], restLength, k, damping);
+      }
+
+      if(rowPosition !== 0) {
+        current.link(this.nodes[c - 1], restLength, k, damping);
+        current.link(this.nodes[c + width - 1], restLength, k, damping);
+        current.link(this.nodes[c - width - 1], restLength, k, damping);
+      }
+    }
   }
 }
 
@@ -203,8 +265,25 @@ window.onload = () => {
 
   window.addEventListener('mousedown', (e) => {
     const clickPoint = [e.clientX, e.clientY];
-    const worldPoint = subVector(clickPoint, origin);
-    gravPoint = worldPoint;
+    for(let c = 0; c < softBodies.length; ++c) {
+      const node = softBodies[c].raycast(clickPoint[0], clickPoint[1]);
+      if(node) {
+        selectedNode = node;
+        node.selected = true;
+        break;
+      }
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    if(selectedNode)
+      selectedNode.selected = false;
+    selectedNode = undefined;
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if(selectedNode)
+      selectedNode.position = [e.clientX, e.clientY];
   });
 
   window.addEventListener('keydown', (e) => {
@@ -214,7 +293,9 @@ window.onload = () => {
       debug = !debug;
   });
 
-  softBodies.push(new SoftBody(300, 200, 3, 2));
+  softBodies.push(new GridBody(300, 200, 16, 16, 20));
+
+  softBodies.push(new BlobBody(500, 200, 6, 6));
 
   lastTime = Date.now();
   requestAnimationFrame(frame);
