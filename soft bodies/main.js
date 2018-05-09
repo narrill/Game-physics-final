@@ -6,7 +6,7 @@ let debug = false;
 let selectedNode;
 
 const groundLevel = 100;
-const GRAVITY_FORCE = 100000;
+const GRAVITY_FORCE = 10000;
 
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
@@ -55,10 +55,11 @@ class SoftBodyNode {
     this.radius = Math.sqrt(m / Math.PI);
     this.linked = [];
     this.selected = false;
+    this.anchored = false;
   }
 
   updateSpringForce(dt) {
-    if(this.selected)
+    if(this.selected || this.anchored)
       return;
     for(let c = 0; c < this.linked.length; ++c) {
       const spring = this.linked[c];
@@ -76,7 +77,7 @@ class SoftBodyNode {
   }
 
   update(dt) {    
-    if(this.selected)
+    if(this.selected || this.anchored)
       return;
     this.force = addVector(this.force, [0, GRAVITY_FORCE]);
     this.velocity = addVector(this.velocity, scaleVector(dt / this.mass, this.force));
@@ -102,6 +103,12 @@ class SoftBodyNode {
 
   draw(ctx) {
     ctx.save();
+    if(this.anchored) {
+      this.fillStyle = 'red';
+      ctx.beginPath();
+      ctx.arc(this.position[0], this.position[1], this.radius + 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.fillStyle = (this.selected) ? 'blue' : 'green';
     ctx.beginPath();
     ctx.arc(this.position[0], this.position[1], this.radius, 0, Math.PI * 2);
@@ -157,12 +164,20 @@ class SoftBody {
 
 // All nodes link to all other nodes
 class BlobBody extends SoftBody{
-  constructor(x, y, width, height, spacing = 50, restLength = spacing, k = 50000, damping = 100) {
+  constructor(x, y, count = 16, radius = 100, {restLength = radius, k = 50000, damping = 100} = {}) {
     super();
-    for(let c = 0; c < width; ++c) {
-      for(let i = 0; i < height; ++i) {
-        this.nodes.push(new SoftBodyNode(x + c * spacing, y + i * spacing, 100));
-      }
+    // for(let c = 0; c < width; ++c) {
+    //   for(let i = 0; i < height; ++i) {
+    //     this.nodes.push(new SoftBodyNode(x + c * spacing, y + i * spacing, 100));
+    //   }
+    // }
+
+    const initialOffset = [0, radius];
+    const wedgeAngle = Math.PI / count;
+
+    for(let c = 0; c < count; ++c) {
+      const [_x, _y] = addVector([x, y], rotateVector(initialOffset, wedgeAngle * c));
+      this.nodes.push(new SoftBodyNode(_x, _y, 100));
     }
 
     for(let c = 0; c < this.nodes.length - 1; ++c) {
@@ -176,7 +191,7 @@ class BlobBody extends SoftBody{
 
 // Nodes link only to their neighbors
 class GridBody extends SoftBody {
-  constructor(x, y, width, height, spacing = 50, restLength = spacing, k = 20000, damping = 1000) {
+  constructor(x, y, width, height, spacing = 50, {restLength = spacing, k = 20000, damping = 1000} = {}) {
     super();
     for(let c = 0; c < width; ++c) {
       for(let i = 0; i < height; ++i) {
@@ -231,7 +246,7 @@ const frame = () => {
 
   lastTime = now;
 
-  const step = .01;
+  const step = .005;
 
   if(dt >= step*8) {
     dt = 0;
@@ -264,21 +279,33 @@ window.onload = () => {
   context = canvas.getContext('2d');
 
   window.addEventListener('mousedown', (e) => {
-    const clickPoint = [e.clientX, e.clientY];
+    e.preventDefault();
+    const clickPoint = [e.clientX, e.clientY];    
     for(let c = 0; c < softBodies.length; ++c) {
       const node = softBodies[c].raycast(clickPoint[0], clickPoint[1]);
       if(node) {
-        selectedNode = node;
-        node.selected = true;
+        if(e.button === 0) {
+          selectedNode = node;
+          node.selected = true;
+        }
+        else if(e.button === 2)
+          node.anchored = !node.anchored;
         break;
       }
     }
   });
 
-  window.addEventListener('mouseup', () => {
-    if(selectedNode)
-      selectedNode.selected = false;
-    selectedNode = undefined;
+  window.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+  });
+
+  window.addEventListener('mouseup', (e) => {
+    e.preventDefault();
+    if(e.button === 0){
+      if(selectedNode)
+        selectedNode.selected = false;
+      selectedNode = undefined;
+    }
   });
 
   window.addEventListener('mousemove', (e) => {
@@ -293,9 +320,14 @@ window.onload = () => {
       debug = !debug;
   });
 
-  softBodies.push(new GridBody(300, 200, 16, 16, 20));
+  softBodies.push(new GridBody(300, 200, 5, 5, 20, {
+    restLength: 25, 
+    k: 400000
+  }));
 
-  softBodies.push(new BlobBody(500, 200, 6, 6));
+  softBodies.push(new BlobBody(500, 200, 64, 60, {
+    k: 100000
+  }));
 
   lastTime = Date.now();
   requestAnimationFrame(frame);
