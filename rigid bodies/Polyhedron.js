@@ -17,15 +17,22 @@ class Polyhedron {
   }
 
   update(dt) {
-    const adt = this._f.multiplyScalar(dt / this._m);
-    this._v.add(adt);
+    //const adt = this._f.multiplyScalar(dt / this._m);
+    //this._v.add(adt);
     this._mesh.position.add(this._v.clone().multiplyScalar(dt));
-    //this._v.set(0, 0, 0);
-    this._f.set(0, 0, 0);
+    //this._mesh.applyQuaternion(new THREE.Quaternion().slerp(this._w, dt));
+    this._v.set(0, 0, 0);
+    //this._f.set(0, 0, 0);
     this._shouldCalculateAABB = true;
     this._mesh.updateMatrix();
     this._mesh.updateMatrixWorld();
     this._mesh.material.color = new THREE.Color(NON_COLLIDE_COLOR);
+  }
+
+  translate(v) {
+    this._mesh.position.add(v);
+    this._mesh.updateMatrix();
+    this._mesh.updateMatrixWorld();
   }
 
   // Returns a clone because the object's matrix needs to be updated with position changes
