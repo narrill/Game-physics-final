@@ -4,6 +4,7 @@ let origin;
 let debug = false;
 
 const groundLevel = 100;
+const GRAVITY_FORCE = 100000;
 
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
@@ -68,22 +69,21 @@ class SoftBodyNode {
   }
 
   update(dt) {    
+    this.force = addVector(this.force, [0, GRAVITY_FORCE]);
     this.velocity = addVector(this.velocity, scaleVector(dt/this.mass, this.force));
     this.position = addVector(this.position, scaleVector(dt, this.velocity));
+    if(this.position[1] + this.radius > canvas.height - groundLevel) {
+      this.position[1] = canvas.height - groundLevel - this.radius;
+      this.velocity[1] = 0;
+    }
     this.force = [0, 0];
   }
 
   drawLinks(ctx) {
-    for(let c = 0; c < this.linked.length; ++c) {     
-      const other = this.linked[c].other; 
-      ctx.save();
-      ctx.strokeStyle = 'grey';
-      ctx.beginPath();
+    for(let c = 0; c < this.linked.length; ++c) {
+      const other = this.linked[c].other;
       ctx.moveTo(this.position[0], this.position[1]);
       ctx.lineTo(other.position[0], other.position[1]);
-      ctx.strokeWidth = 2;
-      ctx.stroke();
-      ctx.restore();
     }
   }
 
@@ -107,7 +107,7 @@ class SoftBodyNode {
 }
 
 class SoftBody {
-  constructor(x, y, width, height, spacing, restLength = 100, k = 3000, damping = 20) {
+  constructor(x, y, width, height, spacing = 50, restLength = spacing, k = 50000, damping = 100) {
     this.nodes = [];
     for(let c = 0; c < width; ++c) {
       for(let i = 0; i < height; ++i) {
@@ -124,8 +124,14 @@ class SoftBody {
   }
 
   draw(ctx) {
+    ctx.save();
+    ctx.strokeStyle = 'grey';
+    ctx.strokeWidth = 2;
+    ctx.beginPath();
     for(let c = 0; c < this.nodes.length; ++c)
       this.nodes[c].drawLinks(ctx);
+    ctx.stroke();
+    ctx.restore();
     for(let c = 0; c < this.nodes.length; ++c)
       this.nodes[c].draw(ctx);
   }
@@ -143,6 +149,8 @@ const softBodies = [];
 const draw = (now) => {
   context.fillStyle = 'black';
   context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = 'saddleBrown';
+  context.fillRect(0, canvas.height - groundLevel, canvas.width, groundLevel);
   for(let c = 0; c < softBodies.length; ++c)
     softBodies[c].draw(context);
 };
@@ -191,7 +199,7 @@ window.onload = () => {
     origin = [canvas.width / 2, canvas.height / 2];
   });
   document.body.appendChild(canvas);
-  context = canvas.getContext('2d'); 
+  context = canvas.getContext('2d');
 
   window.addEventListener('mousedown', (e) => {
     const clickPoint = [e.clientX, e.clientY];
@@ -206,7 +214,7 @@ window.onload = () => {
       debug = !debug;
   });
 
-  softBodies.push(new SoftBody(300, 200, 6, 6, 3));
+  softBodies.push(new SoftBody(300, 200, 3, 2));
 
   lastTime = Date.now();
   requestAnimationFrame(frame);
