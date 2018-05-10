@@ -2,222 +2,16 @@ let canvas;
 let context;
 let origin;
 let debug = false;
+let gridBody;
+let blobBody;
+let paused = false;
 
 let selectedNode;
+let mousePosition = [0, 0];
 
 const groundLevel = 100;
-const GRAVITY_FORCE = 10000;
-const FRICTION = 60;
-
-const DEG_TO_RAD = Math.PI / 180;
-const RAD_TO_DEG = 180 / Math.PI;
-const UP_VECTOR = [0, -1];
-const DOWN_VECTOR = [0, 1];
-const RIGHT_VECTOR = [1, 0];
-const LEFT_VECTOR = [-1, 0];
-
-const rotateVector = (vector, theta) => {
-  const matrix = [
-    Math.cos(theta), -Math.sin(theta),
-    Math.sin(theta), Math.cos(theta)
-  ];
-  return [matrix[0] * vector[0] + matrix[1] * vector[1], matrix[2] * vector[0] + matrix[3] * vector[1]];
-};
-
-const addVector = (v1, v2) => [v1[0] + v2[0], v1[1] + v2[1]];
-const subVector = (v1, v2) => [v1[0] - v2[0], v1[1] - v2[1]];
-const dotVector = (v1, v2) => v1[0] * v2[0] + v1[1] * v2[1];
-const dotVector3 = (v1, v2) => v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
-const crossVector = (v1, v2) => [v1[1] * v2[2] - v1[2] * v2[1], v1[2] * v2[0] - v1[0] * v2[2], v1[0] * v2[1] - v1[1] * v2[0]];
-const scaleVector = (s, v) => [s * v[0], s * v[1]];
-const scaleVector3 = (s, v) => [s * v[0], s * v[1], s * v[2]];
-const negateVector = (v) => [-v[0], -v[1]];
-const perpendicularVectorCCW = (v) => [v[1], -v[0]];
-const perpendicularVectorCW = (v) => [-v[1], v[0]];
-const tripleProduct = (v1, v2, v3) => subVector(scaleVector(dotVector(v3, v1), v2), scaleVector(dotVector(v3, v2), v1));
-const vectorMagSqr = (v) => v[0] * v[0] + v[1] * v[1];
-const magVector = (v) => Math.sqrt(v[0] * v[0] + v[1] * v[1]);
-const normalizeVector = (v) => {
-  const mag = magVector(v);
-  if(mag === 0)
-    retirn [0, 0];
-  return [v[0] / mag, v[1] / mag];
-};
-const distance = (p1, p2) => magVector(subVector(p1, p2));
-const distanceFromLineToPoint = (line, p) => Math.abs(dotVector(normalizeVector(perpendicularVectorCCW(subVector(line[0], line[1]))), p));
-const vec2ToVec3 = (v) => [v[0], v[1], 0];
-
-class SoftBodyNode {
-  constructor(x, y, m) {
-    this.position = [x, y];
-    this.velocity = [0, 0];
-    this.force = [0, 0];
-    this.mass = m;
-    this.radius = Math.sqrt(m / Math.PI);
-    this.linked = [];
-    this.selected = false;
-    this.anchored = false;
-  }
-
-  updateSpringForce(dt) {
-    if(this.selected || this.anchored)
-      return;
-    for(let c = 0; c < this.linked.length; ++c) {
-      const spring = this.linked[c];
-      const other = this.linked[c].other;
-      const diff = subVector(other.position, this.position);
-      const distance = magVector(diff);
-      const direction = normalizeVector(diff);
-
-      const compression = distance - spring.restLength;
-      const velocity = subVector(other.velocity, this.velocity);
-
-      const force = (compression * spring.k) + dotVector(velocity, direction) * spring.damping;
-      this.force = addVector(this.force, scaleVector(force, direction));
-    }
-  }
-
-  update(dt) {    
-    if(this.selected || this.anchored)
-      return;
-    this.force = addVector(this.force, [0, GRAVITY_FORCE]);
-    this.velocity = addVector(this.velocity, scaleVector(dt / this.mass, this.force));
-    this.position = addVector(this.position, scaleVector(dt, this.velocity));
-    this.force = [0, 0];
-    if(this.position[1] + this.radius > canvas.height - groundLevel) {
-      this.position[1] = canvas.height - groundLevel - this.radius;
-      this.velocity[0] -= this.velocity[0] * (FRICTION * dt);
-      this.velocity[1] = -this.velocity[1];
-    }
-  }
-
-  raycast(x, y) {
-    return vectorMagSqr(subVector([x, y], this.position)) <= this.radius * this.radius;
-  }
-
-  drawLinks(ctx) {
-    for(let c = 0; c < this.linked.length; ++c) {
-      const other = this.linked[c].other;
-      ctx.moveTo(this.position[0], this.position[1]);
-      ctx.lineTo(other.position[0], other.position[1]);
-    }
-  }
-
-  draw(ctx) {
-    ctx.save();
-    if(this.anchored) {
-      this.fillStyle = 'red';
-      ctx.beginPath();
-      ctx.arc(this.position[0], this.position[1], this.radius + 2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.fillStyle = (this.selected) ? 'blue' : 'green';
-    ctx.beginPath();
-    ctx.arc(this.position[0], this.position[1], this.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  link(node, restLength, k, damping) {
-    if(!node)
-      return;
-    this.linked.push({
-      other: node,
-      restLength,
-      k,
-      damping
-    });
-  }
-}
-
-class SoftBody {
-  constructor() {
-    this.nodes = [];    
-  }
-
-  raycast(x, y) {
-    for(let c = 0; c < this.nodes.length; ++c) {
-      if(this.nodes[c].raycast(x, y))
-        return this.nodes[c];
-    }
-    return undefined;
-  }
-
-  draw(ctx) {
-    ctx.save();
-    ctx.strokeStyle = 'grey';
-    ctx.strokeWidth = 2;
-    ctx.beginPath();
-    for(let c = 0; c < this.nodes.length; ++c)
-      this.nodes[c].drawLinks(ctx);
-    ctx.stroke();
-    ctx.restore();
-    for(let c = 0; c < this.nodes.length; ++c)
-      this.nodes[c].draw(ctx);
-  }
-
-  update(dt) {
-    for(let c = 0; c < this.nodes.length; ++c)
-      this.nodes[c].updateSpringForce();
-    for(let c = 0; c < this.nodes.length; ++c)
-      this.nodes[c].update(dt);
-  }
-}
-
-// All nodes link to all other nodes
-class BlobBody extends SoftBody{
-  constructor(x, y, count = 16, radius = 100, {restLength = radius, k = 50000, damping = 100} = {}) {
-    super();
-
-    const initialOffset = [0, radius];
-    const wedgeAngle = Math.PI / count;
-
-    for(let c = 0; c < count; ++c) {
-      const [_x, _y] = addVector([x, y], rotateVector(initialOffset, wedgeAngle * c));
-      this.nodes.push(new SoftBodyNode(_x, _y, 100));
-    }
-
-    for(let c = 0; c < this.nodes.length - 1; ++c) {
-      for(let i = c + 1; i < this.nodes.length; ++i) {
-        this.nodes[c].link(this.nodes[i], restLength, k, damping);
-        this.nodes[i].link(this.nodes[c], restLength, k, damping);
-      }
-    }
-  }
-}
-
-// Nodes link only to their neighbors
-class GridBody extends SoftBody {
-  constructor(x, y, width, height, spacing = 50, {restLength = spacing, k = 20000, damping = 1000} = {}) {
-    super();
-
-    for(let c = 0; c < width; ++c) {
-      for(let i = 0; i < height; ++i) {
-        this.nodes.push(new SoftBodyNode(x + c * spacing, y + i * spacing, 100));
-      }
-    }
-
-    for(let c = 0; c < this.nodes.length; ++c) {
-      const current = this.nodes[c];
-      const rowPosition = c % width;
-
-      current.link(this.nodes[c + width], restLength, k, damping);
-      current.link(this.nodes[c - width], restLength, k, damping);
-
-      if(rowPosition !== width - 1) {
-        current.link(this.nodes[c + 1], restLength, k, damping);
-        current.link(this.nodes[c + width + 1], restLength, k, damping);
-        current.link(this.nodes[c - width + 1], restLength, k, damping);
-      }
-
-      if(rowPosition !== 0) {
-        current.link(this.nodes[c - 1], restLength, k, damping);
-        current.link(this.nodes[c + width - 1], restLength, k, damping);
-        current.link(this.nodes[c - width - 1], restLength, k, damping);
-      }
-    }
-  }
-}
+let GRAVITY_FORCE;
+let FRICTION;
 
 const softBodies = [];
 
@@ -231,6 +25,8 @@ const draw = (now) => {
 };
 
 const update = (dt) => {
+  if(paused)
+    return;
   for(let c = 0; c < softBodies.length; ++c)
     softBodies[c].update(dt);
 };
@@ -263,6 +59,24 @@ const frame = () => {
   requestAnimationFrame(frame);
 };
 
+const getSpringValues = (name) => {
+  const restLength = Number(document.querySelector(`#${name}RestLength`).value);
+  const k = Number(document.querySelector(`#${name}k`).value);
+  const damping = Number(document.querySelector(`#${name}Damping`).value);
+
+  return {restLength, k, damping};
+};
+
+const resetBodies = () => {
+  gridBody.reset(canvas.width / 3, canvas.height / 2, 7, 7, getSpringValues("grid"));
+  blobBody.reset(2 * canvas.width / 3, canvas.height / 2, 64, getSpringValues("blob"));
+};
+
+const resetSprings = () => {
+  gridBody.resetSpring(getSpringValues("grid"));
+  blobBody.resetSpring(getSpringValues("blob"));
+};
+
 window.onload = () => {
   canvas = document.createElement('canvas');
   canvas.width = window.innerWidth;
@@ -276,7 +90,7 @@ window.onload = () => {
   document.body.appendChild(canvas);
   context = canvas.getContext('2d');
 
-  window.addEventListener('mousedown', (e) => {
+  canvas.addEventListener('mousedown', (e) => {
     e.preventDefault();
     const clickPoint = [e.clientX, e.clientY];    
     for(let c = 0; c < softBodies.length; ++c) {
@@ -293,11 +107,11 @@ window.onload = () => {
     }
   });
 
-  window.addEventListener('contextmenu', (e) => {
+  canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
   });
 
-  window.addEventListener('mouseup', (e) => {
+  canvas.addEventListener('mouseup', (e) => {
     e.preventDefault();
     if(e.button === 0){
       if(selectedNode)
@@ -306,7 +120,8 @@ window.onload = () => {
     }
   });
 
-  window.addEventListener('mousemove', (e) => {
+  canvas.addEventListener('mousemove', (e) => {
+    mousePosition = [e.clientX, e.clientY];
     if(selectedNode)
       selectedNode.position = [e.clientX, e.clientY];
   });
@@ -314,17 +129,42 @@ window.onload = () => {
   window.addEventListener('keydown', (e) => {
     if(e.repeat)
       return;
-    if(e.key === 'd')
-      debug = !debug;
+    if(e.key === 'd') {
+      resetBodies();
+    }
+    if(e.key === 'p') {
+      paused = !paused;
+      document.querySelector("#pause").checked = paused;
+    }
   });
 
-  softBodies.push(new GridBody(300, 200, 5, 5, 20, { 
-    k: 400000
-  }));
+  gridBody = new GridBody();
+  softBodies.push(gridBody);
 
-  softBodies.push(new BlobBody(500, 200, 64, 60, {
-    k: 100000
-  }));
+  blobBody = new BlobBody();
+  softBodies.push(blobBody);
+
+  resetBodies();
+
+  const gridInputs = document.querySelectorAll("input[type=range]");
+  Object.values(gridInputs).forEach((elem) => {
+    elem.onchange = resetSprings;
+  });
+
+  const gravSlider = document.querySelector("#gravity");
+  GRAVITY_FORCE = Number(gravSlider.value);
+  gravSlider.onchange = () => GRAVITY_FORCE = Number(gravSlider.value);
+
+  const frictionSlider = document.querySelector("#friction");
+  FRICTION = Number(frictionSlider.value);
+  frictionSlider.onchange = () => FRICTION = Number(frictionSlider.value);
+
+  const pauseBox = document.querySelector("#pause");
+  pauseBox.onchange = () => {
+    paused = pauseBox.checked;
+  };
+
+  document.querySelector("#reset").onclick = resetBodies;
 
   lastTime = Date.now();
   requestAnimationFrame(frame);

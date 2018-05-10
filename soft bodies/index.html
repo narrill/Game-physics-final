@@ -8,10 +8,55 @@
 
 		html, body { width:100%; height:100%; background-color: black; } /* just to be sure these are full screen*/
 
-		canvas { display:block; } /* To remove the scrollbars */
+		canvas { 
+			display:block; 
+			position: absolute;
+		    bottom: 0;
+		    right: 0;
+		    z-index: 1;
+		} /* To remove the scrollbars */
+
+		label, h1, p { color: white;}
+
+		label, button {display: block;}
+
+		.ontop { z-index: 2; position: relative; display:inline-block;}
 	</style>
 </head>
 <body>
+	<div class="ontop">
+		<h1>Grid body</h1>
+		<label>Rest Length</label>
+		<input id="gridRestLength" type="range" min="5" max="100" value="100" step="any">
+		<label>k</label>
+		<input id="gridk" type="range" min="1000" max="1000000" value="800000" step="any">
+		<label>damping</label>
+		<input id="gridDamping" type="range" min="0" max="2700" value="2700" step="any">
+		<h1>Blob body</h1>
+		<label>Rest Length</label>
+		<input id="blobRestLength" type="range" min="5" max="200" value="200" step="any">
+		<label>k</label>
+		<input id="blobk" type="range" min="1000" max="100000" value="100000" step="any">
+		<label>damping</label>
+		<input id="blobDamping" type="range" min="0" max="350" value="350" step="any">
+		<h1>Global</h1>
+		<label>Gravity</label>
+		<input id="gravity" type="range" min="0" max="200000" value="200000" step="any">
+		<label>Friction</label>
+		<input id="friction" type="range" min="0" max="1" value=".8" step="any">
+		<label>Pause</label>
+		<input id="pause" type="checkbox" value="false">
+		<button id="reset">Respawn</button>
+		<p>Click and drag points to move them.</p>
+		<p>Right click a point to lock its position.</p>
+		<p>Press P to pause.</p>
+		<p>Press D to respawn bodies.</p>
+	</div>
+	<script src="vector.js"></script>
+	<script src="SoftBodyNode.js"></script>
+	<script src="SoftBody.js"></script>
+	<script src="GridBody.js"></script>
+	<script src="BlobBody.js"></script>
 	<script src="main.js"></script>
 </body>
 </html>
