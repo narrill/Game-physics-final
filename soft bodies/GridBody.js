@@ -6,6 +6,8 @@ class GridBody extends SoftBody {
 
   reset(x = 0, y = 0, width = 0, height = 0, {restLength = 50, k = 20000, damping = 1000} = {}) {
     super.reset({restLength, k, damping});
+
+    // Place points in a grid around (x, y)
     const offset = [restLength * (width - 1) / 2, restLength * (height - 1) / 2];
     for(let c = 0; c < width; ++c) {
       for(let i = 0; i < height; ++i) {
@@ -13,6 +15,7 @@ class GridBody extends SoftBody {
       }
     }
 
+    // Connect nodes only to their neighbors
     for(let c = 0; c < this.nodes.length; ++c) {
       const current = this.nodes[c];
       const rowPosition = c % width;

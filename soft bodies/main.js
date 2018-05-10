@@ -27,6 +27,7 @@ const draw = (now) => {
 const update = (dt) => {
   if(paused)
     return;
+
   for(let c = 0; c < softBodies.length; ++c)
     softBodies[c].update(dt);
 };
@@ -34,6 +35,7 @@ const update = (dt) => {
 let lastTime = 0;
 let accumulator = 0;
 
+// Fixed timesteps with throttling
 const frame = () => {
   const now = Date.now().valueOf();
   let dt = (now - lastTime) / 1000;
@@ -77,6 +79,7 @@ const resetSprings = () => {
   blobBody.resetSpring(getSpringValues("blob"));
 };
 
+// Initialization
 window.onload = () => {
   canvas = document.createElement('canvas');
   canvas.width = window.innerWidth;

@@ -4,6 +4,7 @@ class SoftBody {
     this.resetSpring(spring);
   }
 
+  // Changes the spring parameters
   resetSpring({restLength, k, damping}) {
     this.restLength = restLength;
     this.k = k;
@@ -32,8 +33,11 @@ class SoftBody {
   }
 
   update(dt) {
+    // Calculate all spring forces in the body before integrating any positions
+    // Helps with numerical stability, probably
     for(let c = 0; c < this.nodes.length; ++c)
       this.nodes[c].updateSpringForce(this.restLength, this.k, this.damping);
+
     for(let c = 0; c < this.nodes.length; ++c)
       this.nodes[c].update(dt);
   }
